@@ -4,6 +4,8 @@ import json
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
+from src.agent.groq_agent import generate_answer
+
 
 def extract_tool_text(tool_result) -> str:
     if not tool_result.content:
@@ -75,19 +77,16 @@ async def run_agent(question: str, url: str) -> str:
                 )
                 scraper_used = "playwright"
 
+            answer = generate_answer(
+                question=question,
+                page_url=result["url"],
+                page_title=result["title"],
+                page_text=result["text"],
+            )
+
             return f"""
-Question:
-{question}
+            Scraper used: {scraper_used}
+            Page: {result["url"]}
 
-Scraper used:
-{scraper_used}
-
-Page:
-{result["url"]}
-
-Title:
-{result["title"]}
-
-Content preview:
-{result["text"][:1500]}
-"""
+            {answer}
+            """
