@@ -27,18 +27,35 @@
 # if __name__ == "__main__":
 #     main()
 
-from src.tools.scrape_website_playwright import scrape_website_playwright
+# from src.tools.scrape_website_playwright import scrape_website_playwright
 
 
-def main():
-    result = scrape_website_playwright(
-        "https://books.toscrape.com/catalogue/a-light-in-the-attic_1000/index.html"
+# def main():
+#     result = scrape_website_playwright(
+#         "https://books.toscrape.com/catalogue/a-light-in-the-attic_1000/index.html"
+#     )
+
+#     print("Title:", result["title"])
+#     print("Text preview:")
+#     print(result["text"][:1000])
+
+
+# if __name__ == "__main__":
+#     main()
+
+import asyncio
+
+from src.agent.agent import run_agent
+
+
+async def main():
+    answer = await run_agent(
+        question="Summarize this website",
+        url="https://books.toscrape.com",
     )
 
-    print("Title:", result["title"])
-    print("Text preview:")
-    print(result["text"][:1000])
+    print(answer)
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
