@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Website Scraper Agent</title>
+
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: #f3f4f6;
+      min-height: 100vh;
+    }
+
+    .chat-toggle {
+      position: fixed;
+      right: 24px;
+      bottom: 24px;
+      width: 64px;
+      height: 64px;
+      border-radius: 50%;
+      border: none;
+      background: #111827;
+      color: white;
+      font-size: 26px;
+      cursor: pointer;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+    }
+
+    .chat-widget {
+      position: fixed;
+      right: 24px;
+      bottom: 100px;
+      width: 380px;
+      max-width: calc(100vw - 48px);
+      height: 560px;
+      max-height: calc(100vh - 130px);
+      background: white;
+      border-radius: 18px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
+      display: none;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .chat-widget.open {
+      display: flex;
+    }
+
+    .chat-header {
+      background: #111827;
+      color: white;
+      padding: 16px;
+    }
+
+    .chat-header h2 {
+      margin: 0;
+      font-size: 18px;
+    }
+
+    .chat-header p {
+      margin: 6px 0 0;
+      font-size: 13px;
+      color: #d1d5db;
+    }
+
+    .chat-messages {
+      flex: 1;
+      padding: 16px;
+      overflow-y: auto;
+      background: #f9fafb;
+    }
+
+    .message {
+      margin-bottom: 14px;
+      padding: 12px;
+      border-radius: 12px;
+      font-size: 14px;
+      line-height: 1.5;
+      white-space: pre-wrap;
+    }
+
+    .message.user {
+      background: #dbeafe;
+      margin-left: 32px;
+    }
+
+    .message.agent {
+      background: white;
+      border: 1px solid #e5e7eb;
+      margin-right: 32px;
+    }
+
+    .chat-form {
+      padding: 14px;
+      border-top: 1px solid #e5e7eb;
+      background: white;
+    }
+
+    .chat-form input,
+    .chat-form textarea {
+      width: 100%;
+      border: 1px solid #d1d5db;
+      border-radius: 10px;
+      padding: 10px;
+      font-size: 14px;
+      margin-bottom: 10px;
+    }
+
+    .chat-form textarea {
+      resize: none;
+      height: 76px;
+    }
+
+    .chat-form button {
+      width: 100%;
+      border: none;
+      border-radius: 10px;
+      padding: 12px;
+      background: #111827;
+      color: white;
+      font-size: 15px;
+      cursor: pointer;
+    }
+
+    .chat-form button:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+  </style>
+</head>
+
+<body>
+  <button class="chat-toggle" id="chatToggle">💬</button>
+
+  <div class="chat-widget" id="chatWidget">
+    <div class="chat-header">
+      <h2>Website Scraper Agent</h2>
+      <p>Ask questions about any website</p>
+    </div>
+
+    <div class="chat-messages" id="chatMessages">
+      <div class="message agent">
+Hi! Enter a website URL and ask me what you want to know.
+      </div>
+    </div>
+
+    <form class="chat-form" id="chatForm">
+      <input
+        id="urlInput"
+        type="url"
+        placeholder="https://books.toscrape.com"
+        required
+      />
+
+      <textarea
+        id="questionInput"
+        placeholder="Summarize this website"
+        required
+      ></textarea>
+
+      <button id="sendButton" type="submit">Ask Agent</button>
+    </form>
+  </div>
+
+  <script>
+    const API_URL = "http://127.0.0.1:8000/chat";
+
+    const chatToggle = document.getElementById("chatToggle");
+    const chatWidget = document.getElementById("chatWidget");
+    const chatForm = document.getElementById("chatForm");
+    const chatMessages = document.getElementById("chatMessages");
+    const urlInput = document.getElementById("urlInput");
+    const questionInput = document.getElementById("questionInput");
+    const sendButton = document.getElementById("sendButton");
+
+    chatToggle.addEventListener("click", () => {
+      chatWidget.classList.toggle("open");
+    });
+
+    function addMessage(type, text) {
+      const message = document.createElement("div");
+      message.className = `message ${type}`;
+      message.textContent = text;
+      chatMessages.appendChild(message);
+      chatMessages.scrollTop = chatMessages.scrollHeight;
+      return message;
+    }
+
+    chatForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+
+      const url = urlInput.value.trim();
+      const question = questionInput.value.trim();
+
+      if (!url || !question) return;
+
+      addMessage("user", `${question}\n\n${url}`);
+
+      const agentMessage = addMessage("agent", "Thinking...");
+      sendButton.disabled = true;
+      sendButton.textContent = "Working...";
+
+      try {
+        const response = await fetch(API_URL, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ url, question }),
+        });
+
+        if (!response.ok) {
+          throw new Error("Request failed");
+        }
+
+        const data = await response.json();
+        agentMessage.textContent = data.answer;
+      } catch (error) {
+        agentMessage.textContent = "Something went wrong. Make sure the FastAPI server is running.";
+      } finally {
+        sendButton.disabled = false;
+        sendButton.textContent = "Ask Agent";
+      }
+    });
+  </script>
+</body>
+</html>
