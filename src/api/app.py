@@ -1,16 +1,51 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
 
-from src.agent.agent import run_agent
+from fastapi.middleware.cors import CORSMiddleware
+from sse_starlette.sse import EventSourceResponse
+
+from src.agent.agent import run_agent, stream_agent
 
 
 app = FastAPI(title="Website Scraper Agent")
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 class ChatRequest(BaseModel):
     url: str
     question: str
 
+@app.post("/chat/stream")
+async def chat_stream(request: ChatRequest):
+    async def event_generator():
+        try:
+            async for chunk in stream_agent(
+                question=request.question,
+                url=request.url,
+            ):
+                yield {
+                    "event": "message",
+                    "data": chunk,
+                }
+
+            yield {
+                "event": "done",
+                "data": "[DONE]",
+            }
+
+        except Exception as error:
+            yield {
+                "event": "error",
+                "data": str(error),
+            }
+
+    return EventSourceResponse(event_generator())
 
 @app.get("/")
 def health_check():

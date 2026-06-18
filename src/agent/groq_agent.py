@@ -51,3 +51,45 @@ Content:
     )
 
     return response.choices[0].message.content
+
+def stream_answer(question: str, page_url: str, page_title: str, page_text: str):
+    client = get_groq_client()
+
+    model = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
+
+    system_prompt = """
+You are a website scraper agent.
+
+You answer user questions using only the scraped website content provided to you.
+If the answer is not available in the content, say that clearly.
+Do not invent facts.
+Keep the answer clear and useful.
+Use Markdown formatting when helpful.
+"""
+
+    user_prompt = f"""
+User question:
+{question}
+
+Scraped page:
+URL: {page_url}
+Title: {page_title}
+
+Content:
+{page_text[:12000]}
+"""
+
+    stream = client.chat.completions.create(
+        model=model,
+        messages=[
+            {"role": "system", "content": system_prompt.strip()},
+            {"role": "user", "content": user_prompt.strip()},
+        ],
+        temperature=0.2,
+        stream=True,
+    )
+
+    for chunk in stream:
+        delta = chunk.choices[0].delta.content
+        if delta:
+            yield delta

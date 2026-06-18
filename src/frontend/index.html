@@ -82,18 +82,121 @@
       border-radius: 12px;
       font-size: 14px;
       line-height: 1.5;
-      white-space: pre-wrap;
+      word-wrap: break-word;
     }
 
     .message.user {
       background: #dbeafe;
       margin-left: 32px;
+      white-space: pre-wrap;
     }
 
     .message.agent {
       background: white;
       border: 1px solid #e5e7eb;
       margin-right: 32px;
+    }
+
+    .message.agent p {
+      margin: 0 0 8px;
+    }
+
+    .message.agent p:last-child {
+      margin-bottom: 0;
+    }
+
+    .message.agent h1,
+    .message.agent h2,
+    .message.agent h3,
+    .message.agent h4 {
+      margin: 12px 0 6px;
+      font-weight: 600;
+    }
+
+    .message.agent h1 { font-size: 18px; }
+    .message.agent h2 { font-size: 16px; }
+    .message.agent h3 { font-size: 15px; }
+    .message.agent h4 { font-size: 14px; }
+
+    .message.agent ul,
+    .message.agent ol {
+      margin: 6px 0;
+      padding-left: 22px;
+    }
+
+    .message.agent li {
+      margin-bottom: 3px;
+    }
+
+    .message.agent code {
+      background: #f3f4f6;
+      padding: 2px 5px;
+      border-radius: 4px;
+      font-size: 13px;
+      font-family: Consolas, Monaco, "Courier New", monospace;
+    }
+
+    .message.agent pre {
+      background: #1f2937;
+      color: #f3f4f6;
+      padding: 12px;
+      border-radius: 8px;
+      overflow-x: auto;
+      font-size: 13px;
+      line-height: 1.45;
+      margin: 8px 0;
+    }
+
+    .message.agent pre code {
+      background: transparent;
+      padding: 0;
+      border-radius: 0;
+      color: inherit;
+    }
+
+    .message.agent a {
+      color: #2563eb;
+      text-decoration: underline;
+    }
+
+    .message.agent blockquote {
+      margin: 8px 0;
+      padding: 6px 14px;
+      border-left: 4px solid #d1d5db;
+      color: #4b5563;
+      background: #f9fafb;
+      border-radius: 4px;
+    }
+
+    .message.agent img {
+      max-width: 100%;
+      border-radius: 6px;
+      margin: 8px 0;
+    }
+
+    .message.agent hr {
+      border: none;
+      border-top: 1px solid #e5e7eb;
+      margin: 12px 0;
+    }
+
+    .message.agent table {
+      border-collapse: collapse;
+      width: 100%;
+      margin: 8px 0;
+      font-size: 13px;
+    }
+
+    .message.agent th,
+    .message.agent td {
+      border: 1px solid #d1d5db;
+      padding: 6px 10px;
+      text-align: left;
+    }
+
+    .message.agent th {
+      background: #f3f4f6;
+      font-weight: 600;
     }
 
     .chat-form {
@@ -146,7 +249,7 @@
 
     <div class="chat-messages" id="chatMessages">
       <div class="message agent">
-Hi! Enter a website URL and ask me what you want to know.
+        Hi! Enter a website URL and ask me what you want to know.
       </div>
     </div>
 
@@ -168,8 +271,11 @@ Hi! Enter a website URL and ask me what you want to know.
     </form>
   </div>
 
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dompurify@3.2.3/dist/purify.min.js"></script>
+
   <script>
-    const API_URL = "http://127.0.0.1:8000/chat";
+    const SSE_URL = "http://127.0.0.1:8000/chat/stream";
 
     const chatToggle = document.getElementById("chatToggle");
     const chatWidget = document.getElementById("chatWidget");
@@ -183,13 +289,25 @@ Hi! Enter a website URL and ask me what you want to know.
       chatWidget.classList.toggle("open");
     });
 
-    function addMessage(type, text) {
+    function addUserMessage(text) {
       const message = document.createElement("div");
-      message.className = `message ${type}`;
+      message.className = "message user";
       message.textContent = text;
       chatMessages.appendChild(message);
       chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+
+    function addAgentContainer() {
+      const message = document.createElement("div");
+      message.className = "message agent";
+      chatMessages.appendChild(message);
       return message;
+    }
+
+    function renderMarkdown(container, markdown) {
+      const html = marked.parse(markdown);
+      container.innerHTML = DOMPurify.sanitize(html);
+      chatMessages.scrollTop = chatMessages.scrollHeight;
     }
 
     chatForm.addEventListener("submit", async (event) => {
@@ -200,17 +318,24 @@ Hi! Enter a website URL and ask me what you want to know.
 
       if (!url || !question) return;
 
-      addMessage("user", `${question}\n\n${url}`);
+      addUserMessage(`${question}\n\n${url}`);
+      questionInput.value = "";
 
-      const agentMessage = addMessage("agent", "Thinking...");
+      const agentEl = addAgentContainer();
+      agentEl.textContent = "Thinking...";
       sendButton.disabled = true;
       sendButton.textContent = "Working...";
 
+      let markdownBuffer = "";
+      let errorMessage = "";
+      let sseBuffer = "";
+
       try {
-        const response = await fetch(API_URL, {
+        const response = await fetch(SSE_URL, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
+            Accept: "text/event-stream",
           },
           body: JSON.stringify({ url, question }),
         });
@@ -219,10 +344,52 @@ Hi! Enter a website URL and ask me what you want to know.
           throw new Error("Request failed");
         }
 
-        const data = await response.json();
-        agentMessage.textContent = data.answer;
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let doneStreaming = false;
+
+        while (!doneStreaming) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          sseBuffer += decoder.decode(value, { stream: true });
+          sseBuffer = sseBuffer.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+          const parts = sseBuffer.split("\n\n");
+          sseBuffer = parts.pop() || "";
+
+          for (const part of parts) {
+            const lines = part.split("\n");
+            let eventType = "";
+            let eventData = "";
+
+            for (const line of lines) {
+              if (line.startsWith("event: ")) {
+                eventType = line.slice(7).trim();
+              } else if (line.startsWith("data: ")) {
+                eventData += line.slice(5).replace(/^ /, "") + "\n";
+              }
+            }
+
+            if (eventData.endsWith("\n")) {
+              eventData = eventData.slice(0, -1);
+            }
+
+            if (eventType === "message" && eventData) {
+              markdownBuffer += eventData;
+              renderMarkdown(agentEl, markdownBuffer);
+            } else if (eventType === "done" || eventData === "[DONE]") {
+              doneStreaming = true;
+              break;
+            } else if (eventType === "error" && eventData) {
+              errorMessage = eventData;
+              throw new Error(eventData);
+            }
+          }
+        }
       } catch (error) {
-        agentMessage.textContent = "Something went wrong. Make sure the FastAPI server is running.";
+        agentEl.textContent = errorMessage
+          ? errorMessage
+          : "Something went wrong. Make sure the FastAPI server is running.";
       } finally {
         sendButton.disabled = false;
         sendButton.textContent = "Ask Agent";
