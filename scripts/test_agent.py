@@ -43,23 +43,6 @@
 # if __name__ == "__main__":
 #     main()
 
-# import asyncio
-
-# from src.agent.agent import run_agent
-
-
-# async def main():
-#     answer = await run_agent(
-#         question="Summarize this website",
-#         url="https://books.toscrape.com",
-#     )
-
-#     print(answer)
-
-
-# if __name__ == "__main__":
-#     asyncio.run(main())
-
 import asyncio
 
 from src.agent.agent import run_agent
