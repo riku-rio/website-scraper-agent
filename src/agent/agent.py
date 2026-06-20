@@ -161,7 +161,10 @@ async def stream_agent(question: str, url: str):
         async with ClientSession(read_stream, write_stream) as session:
             await session.initialize()
 
-            yield "Fetching website pages...\n\n"
+            yield {
+                "event": "progress",
+                "data": "Fetching website pages...",
+            }
 
             pages = await call_mcp_tool(
                 session,
@@ -170,36 +173,63 @@ async def stream_agent(question: str, url: str):
             )
 
             if not pages:
-                yield "I could not find any pages on this website."
+                yield {
+                    "event": "error",
+                    "data": "I could not find any pages on this website.",
+                }
                 return
 
             max_pages = _get_max_scrape_pages()
             pages_to_scrape = pages[:max_pages]
             total = len(pages_to_scrape)
 
-            yield f"Found {len(pages)} pages. Scraping up to {max_pages} pages...\n\n"
+            yield {
+                "event": "progress",
+                "data": f"Found {len(pages)} pages. Scraping up to {max_pages} pages...",
+            }
 
             results = []
+
             for i, page_url in enumerate(pages_to_scrape, 1):
-                yield f"Scraping {i}/{total}: {page_url}\n\n"
+                yield {
+                    "event": "progress",
+                    "data": f"Scraping {i}/{total}: {page_url}",
+                }
 
                 result = await _scrape_page_with_fallback(session, page_url)
+
                 if result is not None:
                     results.append(result)
                 else:
-                    yield f"Skipped failed page: {page_url}\n\n"
+                    yield {
+                        "event": "progress",
+                        "data": f"Skipped failed page: {page_url}",
+                    }
 
             if not results:
-                yield "I could not scrape any pages from this website."
+                yield {
+                    "event": "error",
+                    "data": "I could not scrape any pages from this website.",
+                }
                 return
 
             combined_text = _build_combined_content(results)
 
-            yield f"**Pages scraped:** {len(results)}/{total}\n\n"
-            yield f"**Question:** {question}\n\n---\n\n"
+            yield {
+                "event": "progress",
+                "data": f"Finished scraping {len(results)}/{total} pages. Generating answer...",
+            }
 
             for token in stream_answer(
                 question=question,
                 combined_content=combined_text,
             ):
-                yield token
+                yield {
+                    "event": "answer",
+                    "data": token,
+                }
+
+            yield {
+                "event": "progress",
+                "data": "Done.",
+            }

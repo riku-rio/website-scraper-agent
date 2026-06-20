@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Website Scraper Agent</title>
+
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: #f3f4f6;
+      color: #111827;
+    }
+
+    .page {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .header {
+      background: #111827;
+      color: white;
+      padding: 24px 32px;
+      text-align: center;
+    }
+
+    .header h1 {
+      margin: 0;
+      font-size: 28px;
+    }
+
+    .header p {
+      margin: 8px 0 0;
+      color: #d1d5db;
+      font-size: 15px;
+    }
+
+    .main {
+      width: 100%;
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 28px;
+      flex: 1;
+    }
+
+    .panel {
+      background: white;
+      border: 1px solid #e5e7eb;
+      border-radius: 18px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.06);
+      overflow: hidden;
+    }
+
+    .form {
+      padding: 20px;
+      border-bottom: 1px solid #e5e7eb;
+    }
+
+    .form label {
+      display: block;
+      font-size: 13px;
+      font-weight: 700;
+      margin-bottom: 8px;
+      color: #374151;
+    }
+
+    .form input,
+    .form textarea {
+      width: 100%;
+      border: 1px solid #d1d5db;
+      border-radius: 12px;
+      padding: 12px;
+      font-size: 15px;
+      margin-bottom: 16px;
+      outline: none;
+    }
+
+    .form textarea {
+      min-height: 110px;
+      resize: vertical;
+    }
+
+    .form input:focus,
+    .form textarea:focus {
+      border-color: #111827;
+    }
+
+    .actions {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .button {
+      border: none;
+      border-radius: 12px;
+      padding: 12px 18px;
+      background: #111827;
+      color: white;
+      font-size: 15px;
+      cursor: pointer;
+    }
+
+    .button:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    .thinking-toggle {
+      display: none;
+      border: 1px solid #d1d5db;
+      background: #f9fafb;
+      color: #111827;
+      border-radius: 999px;
+      padding: 10px 14px;
+      cursor: pointer;
+      font-size: 14px;
+    }
+
+    .thinking-toggle.visible {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #22c55e;
+    }
+
+    .content {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 0;
+    }
+
+    .thinking-panel {
+      display: none;
+      padding: 16px 20px;
+      background: #f9fafb;
+      border-bottom: 1px solid #e5e7eb;
+    }
+
+    .thinking-panel.open {
+      display: block;
+    }
+
+    .thinking-panel h3 {
+      margin: 0 0 12px;
+      font-size: 15px;
+    }
+
+    .progress-list {
+      margin: 0;
+      padding-left: 20px;
+      font-size: 14px;
+      color: #374151;
+      line-height: 1.6;
+    }
+
+    .answer-wrap {
+      padding: 24px;
+      min-height: 380px;
+    }
+
+    .answer-placeholder {
+      color: #6b7280;
+      font-size: 15px;
+    }
+
+    .answer {
+      line-height: 1.65;
+      font-size: 16px;
+    }
+
+    .answer h1,
+    .answer h2,
+    .answer h3 {
+      margin-top: 22px;
+      margin-bottom: 10px;
+    }
+
+    .answer p {
+      margin: 0 0 12px;
+    }
+
+    .answer ul,
+    .answer ol {
+      padding-left: 24px;
+      margin: 8px 0 16px;
+    }
+
+    .answer li {
+      margin-bottom: 6px;
+    }
+
+    .answer code {
+      background: #f3f4f6;
+      padding: 2px 6px;
+      border-radius: 5px;
+      font-family: Consolas, Monaco, "Courier New", monospace;
+      font-size: 14px;
+    }
+
+    .answer pre {
+      background: #1f2937;
+      color: #f9fafb;
+      padding: 16px;
+      border-radius: 12px;
+      overflow-x: auto;
+    }
+
+    .answer pre code {
+      background: transparent;
+      padding: 0;
+      color: inherit;
+    }
+
+    .answer table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 16px 0;
+      font-size: 14px;
+    }
+
+    .answer th,
+    .answer td {
+      border: 1px solid #d1d5db;
+      padding: 8px 10px;
+      text-align: left;
+    }
+
+    .answer th {
+      background: #f3f4f6;
+    }
+
+    .error {
+      color: #b91c1c;
+      background: #fee2e2;
+      border: 1px solid #fecaca;
+      padding: 12px;
+      border-radius: 12px;
+      margin-bottom: 14px;
+      display: none;
+    }
+
+    .error.visible {
+      display: block;
+    }
+
+    @media (max-width: 700px) {
+      .header {
+        padding: 20px;
+      }
+
+      .main {
+        padding: 16px;
+      }
+
+      .answer-wrap {
+        padding: 18px;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="page">
+    <header class="header">
+      <h1>Website Scraper Agent</h1>
+      <p>Ask questions about a website and get a full-page streamed answer.</p>
+    </header>
+
+    <main class="main">
+      <section class="panel">
+        <form class="form" id="agentForm">
+          <label for="urlInput">Website URL</label>
+          <input
+            id="urlInput"
+            type="url"
+            placeholder="https://books.toscrape.com"
+            required
+          />
+
+          <label for="questionInput">Question</label>
+          <textarea
+            id="questionInput"
+            placeholder="Summarize this website as bullet points"
+            required
+          ></textarea>
+
+          <div class="actions">
+            <button class="button" id="sendButton" type="submit">
+              Ask Agent
+            </button>
+
+            <button class="thinking-toggle" id="thinkingToggle" type="button">
+              <span class="dot"></span>
+              <span id="thinkingText">Thinking</span>
+              <span>▾</span>
+            </button>
+          </div>
+        </form>
+
+        <div class="content">
+          <div class="thinking-panel" id="thinkingPanel">
+            <h3>Agent progress</h3>
+            <ol class="progress-list" id="progressList"></ol>
+          </div>
+
+          <div class="answer-wrap">
+            <div class="error" id="errorBox"></div>
+            <div class="answer-placeholder" id="answerPlaceholder">
+              Your answer will appear here.
+            </div>
+            <article class="answer" id="answer"></article>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dompurify@3.2.3/dist/purify.min.js"></script>
+
+  <script>
+    const SSE_URL = "http://127.0.0.1:8000/chat/stream";
+
+    const agentForm = document.getElementById("agentForm");
+    const urlInput = document.getElementById("urlInput");
+    const questionInput = document.getElementById("questionInput");
+    const sendButton = document.getElementById("sendButton");
+
+    const thinkingToggle = document.getElementById("thinkingToggle");
+    const thinkingPanel = document.getElementById("thinkingPanel");
+    const thinkingText = document.getElementById("thinkingText");
+    const progressList = document.getElementById("progressList");
+
+    const answer = document.getElementById("answer");
+    const answerPlaceholder = document.getElementById("answerPlaceholder");
+    const errorBox = document.getElementById("errorBox");
+
+    thinkingToggle.addEventListener("click", () => {
+      thinkingPanel.classList.toggle("open");
+    });
+
+    function resetUI() {
+      answer.innerHTML = "";
+      answerPlaceholder.style.display = "block";
+      errorBox.classList.remove("visible");
+      errorBox.textContent = "";
+
+      progressList.innerHTML = "";
+      thinkingToggle.classList.add("visible");
+      thinkingPanel.classList.remove("open");
+      thinkingText.textContent = "Thinking";
+    }
+
+    function addProgress(message) {
+      const item = document.createElement("li");
+      item.textContent = message;
+      progressList.appendChild(item);
+    }
+
+    function renderMarkdown(markdown) {
+      const html = marked.parse(markdown);
+      answer.innerHTML = DOMPurify.sanitize(html);
+      answerPlaceholder.style.display = "none";
+    }
+
+    function showError(message) {
+      errorBox.textContent = message;
+      errorBox.classList.add("visible");
+      thinkingText.textContent = "Failed";
+    }
+
+    agentForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+
+      const url = urlInput.value.trim();
+      const question = questionInput.value.trim();
+
+      if (!url || !question) return;
+
+      resetUI();
+
+      sendButton.disabled = true;
+      sendButton.textContent = "Working...";
+
+      let answerBuffer = "";
+      let sseBuffer = "";
+
+      try {
+        const response = await fetch(SSE_URL, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "text/event-stream",
+          },
+          body: JSON.stringify({ url, question }),
+        });
+
+        if (!response.ok) {
+          throw new Error("Request failed");
+        }
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let doneStreaming = false;
+
+        while (!doneStreaming) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          sseBuffer += decoder.decode(value, { stream: true });
+          sseBuffer = sseBuffer.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+
+          const parts = sseBuffer.split("\n\n");
+          sseBuffer = parts.pop() || "";
+
+          for (const part of parts) {
+            const lines = part.split("\n");
+            let eventType = "message";
+            let eventData = "";
+
+            for (const line of lines) {
+              if (line.startsWith("event: ")) {
+                eventType = line.slice(7).trim();
+              } else if (line.startsWith("data: ")) {
+                eventData += line.slice(5).replace(/^ /, "") + "\n";
+              }
+            }
+
+            if (eventData.endsWith("\n")) {
+              eventData = eventData.slice(0, -1);
+            }
+
+            if (eventType === "progress" && eventData) {
+              addProgress(eventData);
+            } else if (eventType === "answer" && eventData) {
+              answerBuffer += eventData;
+              renderMarkdown(answerBuffer);
+            } else if (eventType === "done" || eventData === "[DONE]") {
+              thinkingText.textContent = "Done";
+              doneStreaming = true;
+              break;
+            } else if (eventType === "error" && eventData) {
+              throw new Error(eventData);
+            }
+          }
+        }
+      } catch (error) {
+        showError(error.message || "Something went wrong. Make sure the FastAPI server is running.");
+      } finally {
+        sendButton.disabled = false;
+        sendButton.textContent = "Ask Agent";
+      }
+    });
+  </script>
+</body>
+</html>

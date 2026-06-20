@@ -37,10 +37,7 @@ async def chat_stream(request: ChatRequest):
                 question=request.question,
                 url=request.url,
             ):
-                yield {
-                    "event": "message",
-                    "data": chunk,
-                }
+                yield chunk
 
             yield {
                 "event": "done",

@@ -285,8 +285,12 @@
     const questionInput = document.getElementById("questionInput");
     const sendButton = document.getElementById("sendButton");
 
+    // chatToggle.addEventListener("click", () => {
+    //   chatWidget.classList.toggle("open");
+    // });
+
     chatToggle.addEventListener("click", () => {
-      chatWidget.classList.toggle("open");
+      window.location.href = "./agent.html";
     });
 
     function addUserMessage(text) {
