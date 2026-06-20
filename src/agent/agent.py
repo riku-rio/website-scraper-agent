@@ -1,10 +1,13 @@
 import ast
 import json
+import logging
 
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
 from src.agent.groq_agent import generate_answer, stream_answer
+
+logger = logging.getLogger(__name__)
 
 
 def extract_tool_text(tool_result) -> str:
@@ -20,7 +23,13 @@ def extract_tool_text(tool_result) -> str:
 
 
 async def call_mcp_tool(session: ClientSession, tool_name: str, arguments: dict):
-    result = await session.call_tool(tool_name, arguments)
+    logger.info("[MCP CALL] tool=%s args=%s", tool_name, arguments)
+
+    try:
+        result = await session.call_tool(tool_name, arguments)
+    except Exception as e:
+        logger.error("[MCP ERR]  tool=%s - %s: %s", tool_name, type(e).__name__, e)
+        raise
 
     if getattr(result, "structured_content", None) is not None:
         return result.structured_content["result"]
@@ -36,12 +45,23 @@ async def call_mcp_tool(session: ClientSession, tool_name: str, arguments: dict)
         parsed = ast.literal_eval(text)
 
     if isinstance(parsed, dict) and "result" in parsed:
+        logger.info("[MCP OK]   tool=%s result=%s", tool_name, _summarize(parsed["result"]))
         return parsed["result"]
 
+    logger.info("[MCP OK]   tool=%s result=%s", tool_name, _summarize(parsed))
     return parsed
 
 
+def _summarize(value, max_len=80) -> str:
+    text = str(value)
+    if len(text) > max_len:
+        return text[:max_len] + "..."
+    return text
+
+
 async def run_agent(question: str, url: str) -> str:
+    logger.info("[AGENT] Starting: question=%s url=%s", question, url)
+
     server_params = StdioServerParameters(
         command="uv",
         args=["run", "python", "-m", "src.mcp_server.server"],
@@ -84,6 +104,8 @@ async def run_agent(question: str, url: str) -> str:
                 page_text=result["text"],
             )
 
+            logger.info("[AGENT] Finished: scraper=%s page=%s", scraper_used, result["url"])
+
             return f"""
             Scraper used: {scraper_used}
             Page: {result["url"]}
@@ -92,6 +114,8 @@ async def run_agent(question: str, url: str) -> str:
             """
 
 async def stream_agent(question: str, url: str):
+    logger.info("[AGENT] Starting (stream): question=%s url=%s", question, url)
+
     server_params = StdioServerParameters(
         command="uv",
         args=["run", "python", "-m", "src.mcp_server.server"],

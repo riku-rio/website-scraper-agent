@@ -1,9 +1,12 @@
+import logging
 import os
 
 from dotenv import load_dotenv
 from groq import Groq
 
 load_dotenv()
+
+logger = logging.getLogger(__name__)
 
 
 def get_groq_client() -> Groq:
@@ -41,6 +44,8 @@ Content:
 {page_text[:12000]}
 """
 
+    logger.info("[LLM] Generating answer: model=%s page_text_length=%d", model, len(page_text))
+
     response = client.chat.completions.create(
         model=model,
         messages=[
@@ -50,7 +55,9 @@ Content:
         temperature=0.2,
     )
 
-    return response.choices[0].message.content
+    content = response.choices[0].message.content
+    logger.info("[LLM] Answer generated: %d chars", len(content))
+    return content
 
 def stream_answer(question: str, page_url: str, page_title: str, page_text: str):
     client = get_groq_client()
@@ -79,6 +86,8 @@ Content:
 {page_text[:12000]}
 """
 
+    logger.info("[LLM] Streaming answer: model=%s page_text_length=%d", model, len(page_text))
+
     stream = client.chat.completions.create(
         model=model,
         messages=[
@@ -89,7 +98,11 @@ Content:
         stream=True,
     )
 
+    char_count = 0
     for chunk in stream:
         delta = chunk.choices[0].delta.content
         if delta:
+            char_count += len(delta)
             yield delta
+
+    logger.info("[LLM] Streaming finished: %d chars total", char_count)

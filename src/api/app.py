@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import FastAPI
 from pydantic import BaseModel
 
@@ -6,6 +8,12 @@ from sse_starlette.sse import EventSourceResponse
 
 from src.agent.agent import run_agent, stream_agent
 
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)-8s] %(name)s - %(message)s",
+    datefmt="%H:%M:%S",
+)
 
 app = FastAPI(title="Website Scraper Agent")
 
