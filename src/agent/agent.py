@@ -1,6 +1,7 @@
 import ast
 import json
 import logging
+import os
 
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
@@ -59,6 +60,44 @@ def _summarize(value, max_len=80) -> str:
     return text
 
 
+def _get_max_scrape_pages() -> int:
+    """Read MAX_SCRAPE_PAGES from environment, default to 5, fallback on invalid."""
+    try:
+        value = os.environ.get("MAX_SCRAPE_PAGES", "5")
+        return max(1, int(value))
+    except (ValueError, TypeError):
+        return 5
+
+
+async def _scrape_page_with_fallback(session: ClientSession, url: str) -> dict | None:
+    """Scrape a single page: try bs4 first, fallback to playwright. Return None if both fail."""
+    try:
+        result = await call_mcp_tool(session, "scrape_bs4", {"url": url})
+        return result
+    except Exception as e:
+        logger.warning("scrape_bs4 failed for %s: %s", url, e)
+
+    try:
+        result = await call_mcp_tool(session, "scrape_playwright", {"url": url})
+        return result
+    except Exception as e:
+        logger.error("scrape_playwright also failed for %s: %s", url, e)
+        return None
+
+
+def _build_combined_content(results: list[dict]) -> str:
+    """Combine multiple scraped pages into a single formatted string."""
+    parts = []
+    for i, r in enumerate(results, 1):
+        parts.append(
+            f"Page {i}\n"
+            f"URL: {r.get('url', '')}\n"
+            f"Title: {r.get('title', '')}\n\n"
+            f"{r.get('text', '')}"
+        )
+    return "\n\n---\n\n".join(parts)
+
+
 async def run_agent(question: str, url: str) -> str:
     logger.info("[AGENT] Starting: question=%s url=%s", question, url)
 
@@ -80,37 +119,34 @@ async def run_agent(question: str, url: str) -> str:
             if not pages:
                 return "I could not find any pages on this website."
 
-            target_page = pages[0]
+            max_pages = _get_max_scrape_pages()
+            pages_to_scrape = pages[:max_pages]
 
-            try:
-                result = await call_mcp_tool(
-                    session,
-                    "scrape_bs4",
-                    {"url": target_page},
-                )
-                scraper_used = "bs4"
-            except Exception:
-                result = await call_mcp_tool(
-                    session,
-                    "scrape_playwright",
-                    {"url": target_page},
-                )
-                scraper_used = "playwright"
+            results = []
+            for page_url in pages_to_scrape:
+                result = await _scrape_page_with_fallback(session, page_url)
+                if result is not None:
+                    results.append(result)
+
+            if not results:
+                return "I could not scrape any pages from this website."
+
+            combined_text = _build_combined_content(results)
 
             answer = generate_answer(
                 question=question,
-                page_url=result["url"],
-                page_title=result["title"],
-                page_text=result["text"],
+                combined_content=combined_text,
             )
 
-            logger.info("[AGENT] Finished: scraper=%s page=%s", scraper_used, result["url"])
+            logger.info("[AGENT] Finished: %d pages scraped", len(results))
+
+            page_list = "\n".join(f"- {r['url']}" for r in results)
 
             return f"""
-            Scraper used: {scraper_used}
-            Page: {result["url"]}
+Pages scraped ({len(results)}):
+{page_list}
 
-            {answer}
+{answer}
             """
 
 async def stream_agent(question: str, url: str):
@@ -137,32 +173,33 @@ async def stream_agent(question: str, url: str):
                 yield "I could not find any pages on this website."
                 return
 
-            target_page = pages[0]
+            max_pages = _get_max_scrape_pages()
+            pages_to_scrape = pages[:max_pages]
+            total = len(pages_to_scrape)
 
-            yield f"Scraping page: `{target_page}`\n\n"
+            yield f"Found {len(pages)} pages. Scraping up to {max_pages} pages...\n\n"
 
-            try:
-                result = await call_mcp_tool(
-                    session,
-                    "scrape_bs4",
-                    {"url": target_page},
-                )
-                scraper_used = "bs4"
-            except Exception:
-                result = await call_mcp_tool(
-                    session,
-                    "scrape_playwright",
-                    {"url": target_page},
-                )
-                scraper_used = "playwright"
+            results = []
+            for i, page_url in enumerate(pages_to_scrape, 1):
+                yield f"Scraping {i}/{total}: {page_url}\n\n"
 
-            yield f"**Scraper used:** `{scraper_used}`\n\n"
-            yield f"**Page:** {result['url']}\n\n---\n\n"
+                result = await _scrape_page_with_fallback(session, page_url)
+                if result is not None:
+                    results.append(result)
+                else:
+                    yield f"Skipped failed page: {page_url}\n\n"
+
+            if not results:
+                yield "I could not scrape any pages from this website."
+                return
+
+            combined_text = _build_combined_content(results)
+
+            yield f"**Pages scraped:** {len(results)}/{total}\n\n"
+            yield f"**Question:** {question}\n\n---\n\n"
 
             for token in stream_answer(
                 question=question,
-                page_url=result["url"],
-                page_title=result["title"],
-                page_text=result["text"],
+                combined_content=combined_text,
             ):
                 yield token

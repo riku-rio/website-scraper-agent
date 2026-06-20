@@ -18,7 +18,7 @@ def get_groq_client() -> Groq:
     return Groq(api_key=api_key)
 
 
-def generate_answer(question: str, page_url: str, page_title: str, page_text: str) -> str:
+def generate_answer(question: str, combined_content: str) -> str:
     client = get_groq_client()
 
     model = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
@@ -36,15 +36,11 @@ Keep the answer clear and useful.
 User question:
 {question}
 
-Scraped page:
-URL: {page_url}
-Title: {page_title}
-
-Content:
-{page_text[:12000]}
+Scraped content:
+{combined_content[:12000]}
 """
 
-    logger.info("[LLM] Generating answer: model=%s page_text_length=%d", model, len(page_text))
+    logger.info("[LLM] Generating answer: model=%s input_length=%d", model, len(combined_content))
 
     response = client.chat.completions.create(
         model=model,
@@ -59,7 +55,7 @@ Content:
     logger.info("[LLM] Answer generated: %d chars", len(content))
     return content
 
-def stream_answer(question: str, page_url: str, page_title: str, page_text: str):
+def stream_answer(question: str, combined_content: str):
     client = get_groq_client()
 
     model = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
@@ -78,15 +74,11 @@ Use Markdown formatting when helpful.
 User question:
 {question}
 
-Scraped page:
-URL: {page_url}
-Title: {page_title}
-
-Content:
-{page_text[:12000]}
+Scraped content:
+{combined_content[:12000]}
 """
 
-    logger.info("[LLM] Streaming answer: model=%s page_text_length=%d", model, len(page_text))
+    logger.info("[LLM] Streaming answer: model=%s input_length=%d", model, len(combined_content))
 
     stream = client.chat.completions.create(
         model=model,
