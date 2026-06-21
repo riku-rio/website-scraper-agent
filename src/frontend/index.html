@@ -92,14 +92,20 @@
 
     /* == Modal header == */
     .modal-header {
+      position: relative;
       display: flex;
       align-items: center;
-      justify-content: space-between;
+      justify-content: center;
       padding: 18px 24px;
       background: #111827;
       color: #fff;
       flex-shrink: 0;
     }
+
+    .modal-header-text {
+      text-align: center;
+    }
+
     .modal-header-text h2 {
       font-size: 18px;
       font-weight: 700;
@@ -111,6 +117,10 @@
     }
 
     #closeModal {
+      position: absolute;
+      right: 24px;
+      top: 50%;
+      transform: translateY(-50%);
       background: rgba(255, 255, 255, 0.1);
       border: none;
       color: #fff;
