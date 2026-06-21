@@ -4,396 +4,603 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Website Scraper Agent</title>
+  <meta name="description" content="Ask any question about a website and get an AI-powered streamed answer." />
 
   <style>
-    * {
-      box-sizing: border-box;
-    }
+    /* == Reset == */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     body {
-      margin: 0;
       font-family: Arial, sans-serif;
       background: #f3f4f6;
       min-height: 100vh;
     }
 
-    .chat-toggle {
+    /* == Floating trigger button == */
+    #chatToggle {
       position: fixed;
       right: 24px;
       bottom: 24px;
+      z-index: 1000;
       width: 64px;
       height: 64px;
       border-radius: 50%;
       border: none;
       background: #111827;
-      color: white;
+      color: #fff;
       font-size: 26px;
       cursor: pointer;
-      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.28);
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    #chatToggle:hover {
+      transform: scale(1.08);
+      box-shadow: 0 14px 38px rgba(0, 0, 0, 0.34);
     }
 
-    .chat-widget {
-      position: fixed;
-      right: 24px;
-      bottom: 100px;
-      width: 380px;
-      max-width: calc(100vw - 48px);
-      height: 560px;
-      max-height: calc(100vh - 130px);
-      background: white;
-      border-radius: 18px;
-      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
+    /* == Backdrop == */
+    #modalBackdrop {
       display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 1100;
+      background: rgba(10, 12, 20, 0.55);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      animation: fadeIn 0.22s ease;
+    }
+    #modalBackdrop.open { display: block; }
+
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to   { opacity: 1; }
+    }
+
+    /* == Modal shell == */
+    #agentModal {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 1200;
+      align-items: center;
+      justify-content: center;
+      padding: 5vh 5vw;
+      pointer-events: none;
+    }
+    #agentModal.open {
+      display: flex;
+      pointer-events: auto;
+    }
+
+    .modal-box {
+      width: 90vw;
+      height: 85vh;
+      max-width: 1200px;
+      background: #fff;
+      border-radius: 24px;
+      box-shadow: 0 32px 80px rgba(0, 0, 0, 0.35);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      animation: slideUp 0.26s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+
+    @keyframes slideUp {
+      from { opacity: 0; transform: translateY(28px) scale(0.97); }
+      to   { opacity: 1; transform: translateY(0)    scale(1);    }
+    }
+
+    /* == Modal header == */
+    .modal-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 18px 24px;
+      background: #111827;
+      color: #fff;
+      flex-shrink: 0;
+    }
+    .modal-header-text h2 {
+      font-size: 18px;
+      font-weight: 700;
+    }
+    .modal-header-text p {
+      margin-top: 3px;
+      font-size: 13px;
+      color: #9ca3af;
+    }
+
+    #closeModal {
+      background: rgba(255, 255, 255, 0.1);
+      border: none;
+      color: #fff;
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      font-size: 18px;
+      line-height: 1;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.15s;
+      flex-shrink: 0;
+    }
+    #closeModal:hover { background: rgba(255, 255, 255, 0.22); }
+
+    /* == Form strip == */
+    .agent-form {
+      padding: 16px 24px;
+      border-bottom: 1px solid #e5e7eb;
+      background: #fff;
+      flex-shrink: 0;
+    }
+
+    .form-row {
+      display: flex;
+      gap: 12px;
+      align-items: flex-end;
+      flex-wrap: wrap;
+    }
+
+    .form-field {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      flex: 1;
+      min-width: 180px;
+    }
+
+    .form-field label {
+      font-size: 12px;
+      font-weight: 700;
+      color: #374151;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .form-field input,
+    .form-field textarea {
+      border: 1px solid #d1d5db;
+      border-radius: 10px;
+      padding: 10px 12px;
+      font-size: 14px;
+      outline: none;
+      color: #111827;
+      transition: border-color 0.15s;
+      width: 100%;
+    }
+    .form-field input:focus,
+    .form-field textarea:focus { border-color: #111827; }
+
+    .form-field textarea {
+      resize: none;
+      height: 66px;
+    }
+
+    .form-actions {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+
+    #sendButton {
+      border: none;
+      border-radius: 10px;
+      padding: 10px 22px;
+      background: #111827;
+      color: #fff;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: opacity 0.15s;
+    }
+    #sendButton:disabled { opacity: 0.55; cursor: not-allowed; }
+
+    #thinkingToggle {
+      display: none;
+      border: 1px solid #d1d5db;
+      background: #f9fafb;
+      color: #111827;
+      border-radius: 999px;
+      padding: 8px 14px;
+      cursor: pointer;
+      font-size: 13px;
+      white-space: nowrap;
+      align-items: center;
+      gap: 7px;
+    }
+    #thinkingToggle.visible { display: inline-flex; }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #22c55e;
+      flex-shrink: 0;
+    }
+
+    /* == Split content area == */
+    .modal-content {
+      flex: 1;
+      display: flex;
+      overflow: hidden;
+    }
+
+    /* Agent progress sidebar */
+    .progress-sidebar {
+      width: 260px;
+      min-width: 220px;
+      border-right: 1px solid #e5e7eb;
+      background: #f9fafb;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      flex-shrink: 0;
+    }
+
+    .progress-sidebar h3 {
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: #6b7280;
+      padding: 14px 16px 10px;
+      border-bottom: 1px solid #e5e7eb;
+      flex-shrink: 0;
+    }
+
+    #progressList {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px 16px;
+      margin: 0;
+      list-style: none;
+    }
+
+    #progressList li {
+      font-size: 13px;
+      color: #374151;
+      line-height: 1.5;
+      padding: 7px 0;
+      border-bottom: 1px solid #e5e7eb;
+      display: flex;
+      gap: 8px;
+      align-items: flex-start;
+    }
+    #progressList li:last-child { border-bottom: none; }
+    #progressList li::before {
+      content: ">";
+      color: #9ca3af;
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+
+    /* Answer panel */
+    .answer-panel {
+      flex: 1;
+      display: flex;
       flex-direction: column;
       overflow: hidden;
     }
 
-    .chat-widget.open {
-      display: flex;
-    }
-
-    .chat-header {
-      background: #111827;
-      color: white;
-      padding: 16px;
-    }
-
-    .chat-header h2 {
-      margin: 0;
-      font-size: 18px;
-    }
-
-    .chat-header p {
-      margin: 6px 0 0;
-      font-size: 13px;
-      color: #d1d5db;
-    }
-
-    .chat-messages {
+    .answer-scroll {
       flex: 1;
-      padding: 16px;
       overflow-y: auto;
-      background: #f9fafb;
+      padding: 24px 28px;
     }
 
-    .message {
-      margin-bottom: 14px;
-      padding: 12px;
+    #errorBox {
+      color: #b91c1c;
+      background: #fee2e2;
+      border: 1px solid #fecaca;
+      padding: 12px 16px;
       border-radius: 12px;
+      margin-bottom: 16px;
       font-size: 14px;
-      line-height: 1.5;
-      word-wrap: break-word;
+      display: none;
+    }
+    #errorBox.visible { display: block; }
+
+    #answerPlaceholder {
+      color: #9ca3af;
+      font-size: 15px;
+      padding-top: 24px;
     }
 
-    .message.user {
-      background: #dbeafe;
-      margin-left: 32px;
-      white-space: pre-wrap;
+    #answer {
+      line-height: 1.7;
+      font-size: 15px;
+      color: #111827;
     }
 
-    .message.agent {
-      background: white;
-      border: 1px solid #e5e7eb;
-      margin-right: 32px;
+    #answer h1, #answer h2, #answer h3, #answer h4 {
+      margin: 20px 0 8px;
+      font-weight: 700;
     }
-
-    .message.agent p {
-      margin: 0 0 8px;
-    }
-
-    .message.agent p:last-child {
-      margin-bottom: 0;
-    }
-
-    .message.agent h1,
-    .message.agent h2,
-    .message.agent h3,
-    .message.agent h4 {
-      margin: 12px 0 6px;
-      font-weight: 600;
-    }
-
-    .message.agent h1 { font-size: 18px; }
-    .message.agent h2 { font-size: 16px; }
-    .message.agent h3 { font-size: 15px; }
-    .message.agent h4 { font-size: 14px; }
-
-    .message.agent ul,
-    .message.agent ol {
-      margin: 6px 0;
-      padding-left: 22px;
-    }
-
-    .message.agent li {
-      margin-bottom: 3px;
-    }
-
-    .message.agent code {
+    #answer h1 { font-size: 22px; }
+    #answer h2 { font-size: 18px; }
+    #answer h3 { font-size: 16px; }
+    #answer h4 { font-size: 14px; }
+    #answer p { margin: 0 0 12px; }
+    #answer ul, #answer ol { padding-left: 24px; margin: 6px 0 14px; }
+    #answer li { margin-bottom: 5px; }
+    #answer code {
       background: #f3f4f6;
-      padding: 2px 5px;
-      border-radius: 4px;
-      font-size: 13px;
+      padding: 2px 6px;
+      border-radius: 5px;
       font-family: Consolas, Monaco, "Courier New", monospace;
-    }
-
-    .message.agent pre {
-      background: #1f2937;
-      color: #f3f4f6;
-      padding: 12px;
-      border-radius: 8px;
-      overflow-x: auto;
       font-size: 13px;
-      line-height: 1.45;
+    }
+    #answer pre {
+      background: #1f2937;
+      color: #f9fafb;
+      padding: 16px;
+      border-radius: 12px;
+      overflow-x: auto;
+      margin: 10px 0;
+    }
+    #answer pre code { background: transparent; padding: 0; color: inherit; font-size: 13px; }
+    #answer a { color: #2563eb; text-decoration: underline; }
+    #answer blockquote {
       margin: 8px 0;
-    }
-
-    .message.agent pre code {
-      background: transparent;
-      padding: 0;
-      border-radius: 0;
-      color: inherit;
-    }
-
-    .message.agent a {
-      color: #2563eb;
-      text-decoration: underline;
-    }
-
-    .message.agent blockquote {
-      margin: 8px 0;
-      padding: 6px 14px;
+      padding: 8px 16px;
       border-left: 4px solid #d1d5db;
       color: #4b5563;
       background: #f9fafb;
       border-radius: 4px;
     }
+    #answer table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 14px; }
+    #answer th, #answer td { border: 1px solid #d1d5db; padding: 8px 10px; text-align: left; }
+    #answer th { background: #f3f4f6; font-weight: 600; }
+    #answer img { max-width: 100%; border-radius: 8px; margin: 8px 0; }
+    #answer hr { border: none; border-top: 1px solid #e5e7eb; margin: 16px 0; }
 
-    .message.agent img {
-      max-width: 100%;
-      border-radius: 6px;
-      margin: 8px 0;
-    }
-
-    .message.agent hr {
-      border: none;
-      border-top: 1px solid #e5e7eb;
-      margin: 12px 0;
-    }
-
-    .message.agent table {
-      border-collapse: collapse;
-      width: 100%;
-      margin: 8px 0;
-      font-size: 13px;
-    }
-
-    .message.agent th,
-    .message.agent td {
-      border: 1px solid #d1d5db;
-      padding: 6px 10px;
-      text-align: left;
-    }
-
-    .message.agent th {
-      background: #f3f4f6;
-      font-weight: 600;
-    }
-
-    .chat-form {
-      padding: 14px;
-      border-top: 1px solid #e5e7eb;
-      background: white;
-    }
-
-    .chat-form input,
-    .chat-form textarea {
-      width: 100%;
-      border: 1px solid #d1d5db;
-      border-radius: 10px;
-      padding: 10px;
-      font-size: 14px;
-      margin-bottom: 10px;
-    }
-
-    .chat-form textarea {
-      resize: none;
-      height: 76px;
-    }
-
-    .chat-form button {
-      width: 100%;
-      border: none;
-      border-radius: 10px;
-      padding: 12px;
-      background: #111827;
-      color: white;
-      font-size: 15px;
-      cursor: pointer;
-    }
-
-    .chat-form button:disabled {
-      opacity: 0.6;
-      cursor: not-allowed;
+    /* == Responsive == */
+    @media (max-width: 640px) {
+      .modal-box { width: 96vw; height: 92vh; border-radius: 18px; }
+      .modal-content { flex-direction: column; }
+      .progress-sidebar {
+        width: 100%;
+        min-width: unset;
+        border-right: none;
+        border-bottom: 1px solid #e5e7eb;
+        max-height: 180px;
+      }
+      .form-row { flex-direction: column; }
     }
   </style>
 </head>
 
 <body>
-  <button class="chat-toggle" id="chatToggle">💬</button>
 
-  <div class="chat-widget" id="chatWidget">
-    <div class="chat-header">
-      <h2>Website Scraper Agent</h2>
-      <p>Ask questions about any website</p>
-    </div>
+  <!-- Floating trigger -->
+  <button id="chatToggle" aria-label="Open agent chat">&#x1F4AC;</button>
 
-    <div class="chat-messages" id="chatMessages">
-      <div class="message agent">
-        Hi! Enter a website URL and ask me what you want to know.
+  <!-- Backdrop -->
+  <div id="modalBackdrop" aria-hidden="true"></div>
+
+  <!-- Modal -->
+  <div id="agentModal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+    <div class="modal-box">
+
+      <!-- Header -->
+      <div class="modal-header">
+        <div class="modal-header-text">
+          <h2 id="modalTitle">Website Scraper Agent</h2>
+          <p>Ask questions about any website</p>
+        </div>
+        <button id="closeModal" aria-label="Close modal">&#x2715;</button>
+      </div>
+
+      <!-- Form strip -->
+      <form class="agent-form" id="agentForm">
+        <div class="form-row">
+          <div class="form-field" style="flex: 1.2;">
+            <label for="urlInput">Website URL</label>
+            <input
+              id="urlInput"
+              type="url"
+              placeholder="https://books.toscrape.com"
+              required
+            />
+          </div>
+
+          <div class="form-field" style="flex: 2;">
+            <label for="questionInput">Question</label>
+            <textarea
+              id="questionInput"
+              placeholder="Summarize this website as bullet points"
+              required
+            ></textarea>
+          </div>
+
+          <div class="form-actions">
+            <button id="sendButton" type="submit">Ask Agent</button>
+            <button id="thinkingToggle" type="button">
+              <span class="status-dot"></span>
+              <span id="thinkingText">Thinking</span>
+              <span>&#x25BE;</span>
+            </button>
+          </div>
+        </div>
+      </form>
+
+      <!-- Split content -->
+      <div class="modal-content">
+
+        <!-- Agent progress sidebar -->
+        <aside class="progress-sidebar">
+          <h3>Agent Progress</h3>
+          <ol id="progressList"></ol>
+        </aside>
+
+        <!-- Answer area -->
+        <div class="answer-panel">
+          <div class="answer-scroll">
+            <div id="errorBox"></div>
+            <div id="answerPlaceholder">Your answer will appear here once you submit a question.</div>
+            <article id="answer"></article>
+          </div>
+        </div>
+
       </div>
     </div>
-
-    <form class="chat-form" id="chatForm">
-      <input
-        id="urlInput"
-        type="url"
-        placeholder="https://books.toscrape.com"
-        required
-      />
-
-      <textarea
-        id="questionInput"
-        placeholder="Summarize this website"
-        required
-      ></textarea>
-
-      <button id="sendButton" type="submit">Ask Agent</button>
-    </form>
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/dompurify@3.2.3/dist/purify.min.js"></script>
 
   <script>
-    const SSE_URL = "http://127.0.0.1:8000/chat/stream";
+    var SSE_URL = "http://127.0.0.1:8000/chat/stream";
 
-    const chatToggle = document.getElementById("chatToggle");
-    const chatWidget = document.getElementById("chatWidget");
-    const chatForm = document.getElementById("chatForm");
-    const chatMessages = document.getElementById("chatMessages");
-    const urlInput = document.getElementById("urlInput");
-    const questionInput = document.getElementById("questionInput");
-    const sendButton = document.getElementById("sendButton");
+    var chatToggle      = document.getElementById("chatToggle");
+    var modalBackdrop   = document.getElementById("modalBackdrop");
+    var agentModal      = document.getElementById("agentModal");
+    var closeModalBtn   = document.getElementById("closeModal");
+    var agentForm       = document.getElementById("agentForm");
+    var urlInput        = document.getElementById("urlInput");
+    var questionInput   = document.getElementById("questionInput");
+    var sendButton      = document.getElementById("sendButton");
+    var thinkingToggle  = document.getElementById("thinkingToggle");
+    var thinkingText    = document.getElementById("thinkingText");
+    var progressList    = document.getElementById("progressList");
+    var answer          = document.getElementById("answer");
+    var answerPlaceholder = document.getElementById("answerPlaceholder");
+    var errorBox        = document.getElementById("errorBox");
 
-    // chatToggle.addEventListener("click", () => {
-    //   chatWidget.classList.toggle("open");
-    // });
+    function openModal() {
+      modalBackdrop.classList.add("open");
+      agentModal.classList.add("open");
+      document.body.style.overflow = "hidden";
+      urlInput.focus();
+    }
 
-    chatToggle.addEventListener("click", () => {
-      window.location.href = "./agent.html";
+    function closeModal() {
+      modalBackdrop.classList.remove("open");
+      agentModal.classList.remove("open");
+      document.body.style.overflow = "";
+    }
+
+    chatToggle.addEventListener("click", openModal);
+    closeModalBtn.addEventListener("click", closeModal);
+    modalBackdrop.addEventListener("click", closeModal);
+
+    document.addEventListener("keydown", function(e) {
+      if (e.key === "Escape" && agentModal.classList.contains("open")) {
+        closeModal();
+      }
     });
 
-    function addUserMessage(text) {
-      const message = document.createElement("div");
-      message.className = "message user";
-      message.textContent = text;
-      chatMessages.appendChild(message);
-      chatMessages.scrollTop = chatMessages.scrollHeight;
+    thinkingToggle.addEventListener("click", function() {
+      var sidebar = document.querySelector(".progress-sidebar");
+      sidebar.style.display = (sidebar.style.display === "none") ? "" : "none";
+    });
+
+    function resetUI() {
+      answer.innerHTML = "";
+      answerPlaceholder.style.display = "block";
+      errorBox.classList.remove("visible");
+      errorBox.textContent = "";
+      progressList.innerHTML = "";
+      thinkingToggle.classList.add("visible");
+      document.querySelector(".progress-sidebar").style.display = "";
+      thinkingText.textContent = "Thinking";
     }
 
-    function addAgentContainer() {
-      const message = document.createElement("div");
-      message.className = "message agent";
-      chatMessages.appendChild(message);
-      return message;
+    function addProgress(message) {
+      var item = document.createElement("li");
+      item.textContent = message;
+      progressList.appendChild(item);
+      progressList.scrollTop = progressList.scrollHeight;
     }
 
-    function renderMarkdown(container, markdown) {
-      const html = marked.parse(markdown);
-      container.innerHTML = DOMPurify.sanitize(html);
-      chatMessages.scrollTop = chatMessages.scrollHeight;
+    function renderMarkdown(markdown) {
+      var html = marked.parse(markdown);
+      answer.innerHTML = DOMPurify.sanitize(html);
+      answerPlaceholder.style.display = "none";
+      answer.parentElement.scrollTop = answer.parentElement.scrollHeight;
     }
 
-    chatForm.addEventListener("submit", async (event) => {
+    function showError(message) {
+      errorBox.textContent = message;
+      errorBox.classList.add("visible");
+      thinkingText.textContent = "Failed";
+    }
+
+    agentForm.addEventListener("submit", async function(event) {
       event.preventDefault();
 
-      const url = urlInput.value.trim();
-      const question = questionInput.value.trim();
-
+      var url      = urlInput.value.trim();
+      var question = questionInput.value.trim();
       if (!url || !question) return;
 
-      addUserMessage(`${question}\n\n${url}`);
-      questionInput.value = "";
-
-      const agentEl = addAgentContainer();
-      agentEl.textContent = "Thinking...";
+      resetUI();
       sendButton.disabled = true;
       sendButton.textContent = "Working...";
 
-      let markdownBuffer = "";
-      let errorMessage = "";
-      let sseBuffer = "";
+      var answerBuffer = "";
+      var sseBuffer    = "";
 
       try {
-        const response = await fetch(SSE_URL, {
+        var response = await fetch(SSE_URL, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            Accept: "text/event-stream",
+            "Accept": "text/event-stream"
           },
-          body: JSON.stringify({ url, question }),
+          body: JSON.stringify({ url: url, question: question })
         });
 
-        if (!response.ok) {
-          throw new Error("Request failed");
-        }
+        if (!response.ok) throw new Error("Request failed");
 
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder();
-        let doneStreaming = false;
+        var reader  = response.body.getReader();
+        var decoder = new TextDecoder();
+        var doneStreaming = false;
 
         while (!doneStreaming) {
-          const { done, value } = await reader.read();
-          if (done) break;
+          var chunk = await reader.read();
+          if (chunk.done) break;
 
-          sseBuffer += decoder.decode(value, { stream: true });
-          sseBuffer = sseBuffer.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
-          const parts = sseBuffer.split("\n\n");
+          sseBuffer += decoder.decode(chunk.value, { stream: true });
+          sseBuffer  = sseBuffer.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+
+          var parts = sseBuffer.split("\n\n");
           sseBuffer = parts.pop() || "";
 
-          for (const part of parts) {
-            const lines = part.split("\n");
-            let eventType = "";
-            let eventData = "";
+          for (var i = 0; i < parts.length; i++) {
+            var lines = parts[i].split("\n");
+            var eventType = "message";
+            var eventData = "";
 
-            for (const line of lines) {
-              if (line.startsWith("event: ")) {
-                eventType = line.slice(7).trim();
-              } else if (line.startsWith("data: ")) {
-                eventData += line.slice(5).replace(/^ /, "") + "\n";
+            for (var j = 0; j < lines.length; j++) {
+              if (lines[j].startsWith("event: ")) {
+                eventType = lines[j].slice(7).trim();
+              } else if (lines[j].startsWith("data: ")) {
+                eventData += lines[j].slice(5).replace(/^ /, "") + "\n";
               }
             }
 
-            if (eventData.endsWith("\n")) {
-              eventData = eventData.slice(0, -1);
-            }
+            if (eventData.endsWith("\n")) eventData = eventData.slice(0, -1);
 
-            if (eventType === "message" && eventData) {
-              markdownBuffer += eventData;
-              renderMarkdown(agentEl, markdownBuffer);
+            if (eventType === "progress" && eventData) {
+              addProgress(eventData);
+            } else if ((eventType === "answer" || eventType === "message") && eventData) {
+              answerBuffer += eventData;
+              renderMarkdown(answerBuffer);
             } else if (eventType === "done" || eventData === "[DONE]") {
+              thinkingText.textContent = "Done";
               doneStreaming = true;
               break;
             } else if (eventType === "error" && eventData) {
-              errorMessage = eventData;
               throw new Error(eventData);
             }
           }
         }
-      } catch (error) {
-        agentEl.textContent = errorMessage
-          ? errorMessage
-          : "Something went wrong. Make sure the FastAPI server is running.";
+      } catch (err) {
+        showError(err.message || "Something went wrong. Make sure the FastAPI server is running.");
       } finally {
         sendButton.disabled = false;
         sendButton.textContent = "Ask Agent";
