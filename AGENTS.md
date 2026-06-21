@@ -19,7 +19,7 @@ No test framework, linter, or formatter is configured. Don't add one unless aske
 - **`src/agent/groq_agent.py`** — Groq chat completions. Calls `load_dotenv()` at module level. `GROQ_MODEL` defaults to `"openai/gpt-oss-120b"`. Page text is truncated to 12K chars.
 - **`src/mcp_server/server.py`** — FastMCP server with 3 tools: `fetch_pages`, `scrape_bs4`, `scrape_playwright`.
 - **`src/tools/`** — Low-level implementations (requests+BS4, Playwright).
-- **`src/frontend/index.html`** — Single-page chat widget. Hardcodes `SSE_URL = "http://127.0.0.1:8000/chat/stream"`.
+- **`src/frontend/index.html`** — Single embeddable modal UI for any website (Vanilla HTML/CSS/JS, WordPress, etc.). Sets `API_BASE_URL` based on `location.hostname` — uses `http://127.0.0.1:8000` automatically on localhost, and reads the production URL from `PRODUCTION_API_BASE_URL` elsewhere. The old `agent.html` full-page features have been merged here.
 
 ## Critical gotchas
 
@@ -28,5 +28,5 @@ No test framework, linter, or formatter is configured. Don't add one unless aske
 - **scrape_bs4 fallback:** `agent.py` silently falls back to `scrape_playwright` on any exception. The first error is swallowed — don't lose it if debugging.
 - **`.env` is gitignored.** Use `.env.example` as the template. `load_dotenv()` is called in `groq_agent.py`.
 - **Python 3.10.11 only** (see `.python-version`).
-- **Frontend SSE URL is hardcoded** to `localhost:8000` — won't work on a remote server without editing.
+- **Frontend API base URL:** Change `PRODUCTION_API_BASE_URL` in `src/frontend/index.html` when deploying to production. Localhost is detected automatically.
 - **`logging.basicConfig` runs in `app.py`.** Running `main.py` directly won't produce the same formatted logs.
