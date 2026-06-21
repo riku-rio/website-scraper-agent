@@ -500,6 +500,16 @@
     closeModalBtn.addEventListener("click", closeModal);
     modalBackdrop.addEventListener("click", closeModal);
 
+    agentModal.addEventListener("click", function (e) {
+      if (e.target === agentModal) {
+        closeModal();
+      }
+    });
+
+    document.querySelector(".modal-box").addEventListener("click", function (e) {
+      e.stopPropagation();
+    });
+
     document.addEventListener("keydown", function (e) {
       if (e.key === "Escape" && agentModal.classList.contains("open")) {
         closeModal();
