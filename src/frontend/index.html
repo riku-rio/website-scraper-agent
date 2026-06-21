@@ -454,23 +454,27 @@
   <script src="https://cdn.jsdelivr.net/npm/dompurify@3.2.3/dist/purify.min.js"></script>
 
   <script>
+    /* ── Config ───────────────────────────────────────────────── */
     var SSE_URL = "http://127.0.0.1:8000/chat/stream";
 
-    var chatToggle      = document.getElementById("chatToggle");
-    var modalBackdrop   = document.getElementById("modalBackdrop");
-    var agentModal      = document.getElementById("agentModal");
-    var closeModalBtn   = document.getElementById("closeModal");
-    var agentForm       = document.getElementById("agentForm");
-    var urlInput        = document.getElementById("urlInput");
-    var questionInput   = document.getElementById("questionInput");
-    var sendButton      = document.getElementById("sendButton");
-    var thinkingToggle  = document.getElementById("thinkingToggle");
-    var thinkingText    = document.getElementById("thinkingText");
-    var progressList    = document.getElementById("progressList");
-    var answer          = document.getElementById("answer");
+    /* ── DOM refs ─────────────────────────────────────────────── */
+    var chatToggle       = document.getElementById("chatToggle");
+    var modalBackdrop    = document.getElementById("modalBackdrop");
+    var agentModal       = document.getElementById("agentModal");
+    var closeModalBtn    = document.getElementById("closeModal");
+    var agentForm        = document.getElementById("agentForm");
+    var urlInput         = document.getElementById("urlInput");
+    var questionInput    = document.getElementById("questionInput");
+    var sendButton       = document.getElementById("sendButton");
+    var thinkingToggle   = document.getElementById("thinkingToggle");
+    var thinkingText     = document.getElementById("thinkingText");
+    var progressList     = document.getElementById("progressList");
+    var answerEl         = document.getElementById("answer");
     var answerPlaceholder = document.getElementById("answerPlaceholder");
-    var errorBox        = document.getElementById("errorBox");
+    var errorBox         = document.getElementById("errorBox");
+    var progressSidebar  = document.querySelector(".progress-sidebar");
 
+    /* ── Modal open / close ───────────────────────────────────── */
     function openModal() {
       modalBackdrop.classList.add("open");
       agentModal.classList.add("open");
@@ -488,25 +492,27 @@
     closeModalBtn.addEventListener("click", closeModal);
     modalBackdrop.addEventListener("click", closeModal);
 
-    document.addEventListener("keydown", function(e) {
+    document.addEventListener("keydown", function (e) {
       if (e.key === "Escape" && agentModal.classList.contains("open")) {
         closeModal();
       }
     });
 
-    thinkingToggle.addEventListener("click", function() {
-      var sidebar = document.querySelector(".progress-sidebar");
-      sidebar.style.display = (sidebar.style.display === "none") ? "" : "none";
+    /* ── Progress sidebar toggle ──────────────────────────────── */
+    thinkingToggle.addEventListener("click", function () {
+      progressSidebar.style.display =
+        progressSidebar.style.display === "none" ? "" : "none";
     });
 
+    /* ── UI helpers ───────────────────────────────────────────── */
     function resetUI() {
-      answer.innerHTML = "";
+      answerEl.innerHTML = "";
       answerPlaceholder.style.display = "block";
       errorBox.classList.remove("visible");
       errorBox.textContent = "";
       progressList.innerHTML = "";
+      progressSidebar.style.display = "";
       thinkingToggle.classList.add("visible");
-      document.querySelector(".progress-sidebar").style.display = "";
       thinkingText.textContent = "Thinking";
     }
 
@@ -519,9 +525,11 @@
 
     function renderMarkdown(markdown) {
       var html = marked.parse(markdown);
-      answer.innerHTML = DOMPurify.sanitize(html);
+      answerEl.innerHTML = DOMPurify.sanitize(html);
       answerPlaceholder.style.display = "none";
-      answer.parentElement.scrollTop = answer.parentElement.scrollHeight;
+      /* Auto-scroll answer panel to bottom */
+      answerEl.closest(".answer-scroll").scrollTop =
+        answerEl.closest(".answer-scroll").scrollHeight;
     }
 
     function showError(message) {
@@ -530,7 +538,37 @@
       thinkingText.textContent = "Failed";
     }
 
-    agentForm.addEventListener("submit", async function(event) {
+    /* ── SSE line parser ──────────────────────────────────────── */
+    /**
+     * Parse a single SSE "block" (text between two blank lines) into
+     * { eventType, eventData }.  Correctly handles the RFC 8895 field
+     * format where "data: " (with a trailing space) is 6 chars, so we
+     * slice from index 6, not 5.
+     */
+    function parseSseBlock(block) {
+      var lines     = block.split("\n");
+      var eventType = "message"; /* SSE default when no event: field */
+      var dataLines = [];
+
+      for (var i = 0; i < lines.length; i++) {
+        var line = lines[i];
+        if (line.startsWith("event:")) {
+          /* Strip "event:" plus an optional single space */
+          eventType = line.slice(6).replace(/^ /, "").trim();
+        } else if (line.startsWith("data:")) {
+          /* Strip "data:" plus an optional single space (RFC 8895 §3.3) */
+          dataLines.push(line.slice(5).replace(/^ /, ""));
+        }
+        /* Ignore id:, retry:, and comment lines (:) */
+      }
+
+      /* Join multi-line data values with newline, per spec */
+      var eventData = dataLines.join("\n");
+      return { eventType: eventType, eventData: eventData };
+    }
+
+    /* ── Form submit / streaming ──────────────────────────────── */
+    agentForm.addEventListener("submit", async function (event) {
       event.preventDefault();
 
       var url      = urlInput.value.trim();
@@ -538,71 +576,96 @@
       if (!url || !question) return;
 
       resetUI();
-      sendButton.disabled = true;
-      sendButton.textContent = "Working...";
+
+      /* Clear only the question field; preserve URL for convenience */
+      questionInput.value = "";
+
+      sendButton.disabled    = true;
+      sendButton.textContent = "Working\u2026"; /* "Working…" */
 
       var answerBuffer = "";
       var sseBuffer    = "";
 
       try {
+        /* ── 1. POST request ──────────────────────────────────── */
         var response = await fetch(SSE_URL, {
-          method: "POST",
+          method:  "POST",
           headers: {
             "Content-Type": "application/json",
-            "Accept": "text/event-stream"
+            "Accept":       "text/event-stream"
           },
           body: JSON.stringify({ url: url, question: question })
         });
 
-        if (!response.ok) throw new Error("Request failed");
+        if (!response.ok) {
+          throw new Error(
+            "Server error " + response.status + ": " + response.statusText
+          );
+        }
 
-        var reader  = response.body.getReader();
-        var decoder = new TextDecoder();
-        var doneStreaming = false;
+        /* ── 2. Stream reader ─────────────────────────────────── */
+        var reader        = response.body.getReader();
+        var decoder       = new TextDecoder();
+        var doneStreaming  = false;
 
         while (!doneStreaming) {
           var chunk = await reader.read();
+
+          /* Underlying stream closed before a done event — treat as done */
           if (chunk.done) break;
 
+          /* Accumulate raw bytes, normalise all line-endings to \n */
           sseBuffer += decoder.decode(chunk.value, { stream: true });
           sseBuffer  = sseBuffer.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
 
-          var parts = sseBuffer.split("\n\n");
-          sseBuffer = parts.pop() || "";
+          /* SSE blocks are separated by a blank line (\n\n) */
+          var blocks = sseBuffer.split("\n\n");
 
-          for (var i = 0; i < parts.length; i++) {
-            var lines = parts[i].split("\n");
-            var eventType = "message";
-            var eventData = "";
+          /* The last element is an incomplete block — hold it for next chunk */
+          sseBuffer = blocks.pop() || "";
 
-            for (var j = 0; j < lines.length; j++) {
-              if (lines[j].startsWith("event: ")) {
-                eventType = lines[j].slice(7).trim();
-              } else if (lines[j].startsWith("data: ")) {
-                eventData += lines[j].slice(5).replace(/^ /, "") + "\n";
-              }
-            }
+          /* ── 3. Dispatch events ─────────────────────────────── */
+          for (var b = 0; b < blocks.length; b++) {
+            var block = blocks[b].trim();
+            if (!block) continue; /* skip empty separators */
 
-            if (eventData.endsWith("\n")) eventData = eventData.slice(0, -1);
+            var parsed    = parseSseBlock(block);
+            var eventType = parsed.eventType;
+            var eventData = parsed.eventData;
 
             if (eventType === "progress" && eventData) {
+              /* Append one step to the Agent Progress sidebar */
               addProgress(eventData);
-            } else if ((eventType === "answer" || eventType === "message") && eventData) {
+
+            } else if (
+              (eventType === "answer" || eventType === "message") && eventData
+            ) {
+              /* Stream answer text into the markdown panel */
               answerBuffer += eventData;
               renderMarkdown(answerBuffer);
-            } else if (eventType === "done" || eventData === "[DONE]") {
+
+            } else if (
+              eventType === "done" || eventData === "[DONE]"
+            ) {
+              /* Mark run complete and exit the read loop */
               thinkingText.textContent = "Done";
               doneStreaming = true;
               break;
+
             } else if (eventType === "error" && eventData) {
+              /* Surface backend error in the UI */
               throw new Error(eventData);
             }
           }
         }
       } catch (err) {
-        showError(err.message || "Something went wrong. Make sure the FastAPI server is running.");
+        showError(
+          err.message ||
+          "Something went wrong. Make sure the FastAPI server is running."
+        );
       } finally {
-        sendButton.disabled = false;
+        /* Always re-enable the submit button regardless of outcome */
+        sendButton.disabled    = false;
         sendButton.textContent = "Ask Agent";
       }
     });
