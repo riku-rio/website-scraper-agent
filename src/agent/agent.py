@@ -110,11 +110,15 @@ async def run_agent(question: str, url: str) -> str:
         async with ClientSession(read_stream, write_stream) as session:
             await session.initialize()
 
-            pages = await call_mcp_tool(
-                session,
-                "fetch_pages",
-                {"url": url},
-            )
+            try:
+                pages = await call_mcp_tool(
+                    session,
+                    "fetch_pages",
+                    {"url": url},
+                )
+            except Exception as e:
+                logger.exception("fetch_pages failed for %s: %s", url, e)
+                pages = [url]
 
             if not pages:
                 return "I could not find any pages on this website."
@@ -166,11 +170,19 @@ async def stream_agent(question: str, url: str):
                 "data": "Fetching website pages...",
             }
 
-            pages = await call_mcp_tool(
-                session,
-                "fetch_pages",
-                {"url": url},
-            )
+            try:
+                pages = await call_mcp_tool(
+                    session,
+                    "fetch_pages",
+                    {"url": url},
+                )
+            except Exception as e:
+                logger.exception("fetch_pages failed for %s: %s", url, e)
+                yield {
+                    "event": "progress",
+                    "data": "Page discovery failed. Scraping the provided URL only.",
+                }
+                pages = [url]
 
             if not pages:
                 yield {
