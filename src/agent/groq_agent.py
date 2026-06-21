@@ -26,9 +26,16 @@ def generate_answer(question: str, combined_content: str) -> str:
     system_prompt = """
 You are a website scraper agent.
 
-You answer user questions using only the scraped website content provided to you.
-If the answer is not available in the content, say that clearly.
-Do not invent facts.
+You answer user questions using the scraped website content provided below.
+
+The first section, "PRIMARY REQUESTED PAGE", is the main page the user is asking about.
+Sections labeled "RELATED PAGE 1", "RELATED PAGE 2", etc. are supporting context.
+
+Base your answer primarily on the PRIMARY REQUESTED PAGE.
+Use related pages only as supplementary context.
+If the PRIMARY REQUESTED PAGE does not contain enough information to answer the question,
+say that clearly. Do not fabricate answers from unrelated sections.
+
 Keep the answer clear and useful.
 """
 
@@ -63,11 +70,17 @@ def stream_answer(question: str, combined_content: str):
     system_prompt = """
 You are a website scraper agent.
 
-You answer user questions using only the scraped website content provided to you.
-If the answer is not available in the content, say that clearly.
-Do not invent facts.
-Keep the answer clear and useful.
-Use Markdown formatting when helpful.
+You answer user questions using the scraped website content provided below.
+
+The first section, "PRIMARY REQUESTED PAGE", is the main page the user is asking about.
+Sections labeled "RELATED PAGE 1", "RELATED PAGE 2", etc. are supporting context.
+
+Base your answer primarily on the PRIMARY REQUESTED PAGE.
+Use related pages only as supplementary context.
+If the PRIMARY REQUESTED PAGE does not contain enough information to answer the question,
+say that clearly. Do not fabricate answers from unrelated sections.
+
+Keep the answer clear and useful. Use Markdown formatting when helpful.
 """
 
     user_prompt = f"""

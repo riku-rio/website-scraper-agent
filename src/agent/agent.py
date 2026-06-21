@@ -60,6 +60,14 @@ def _summarize(value, max_len=80) -> str:
     return text
 
 
+def build_pages_to_scrape(user_url: str, discovered_pages: list[str], limit: int = 5) -> list[str]:
+    pages = [user_url]
+    for page in discovered_pages:
+        if page not in pages:
+            pages.append(page)
+    return pages[:limit]
+
+
 def _get_max_scrape_pages() -> int:
     """Read MAX_SCRAPE_PAGES from environment, default to 5, fallback on invalid."""
     try:
@@ -85,16 +93,29 @@ async def _scrape_page_with_fallback(session: ClientSession, url: str) -> dict |
         return None
 
 
-def _build_combined_content(results: list[dict]) -> str:
-    """Combine multiple scraped pages into a single formatted string."""
+def _build_combined_content(results: list[dict], user_url: str) -> str:
+    """Combine multiple scraped pages, clearly separating the primary URL from related pages."""
     parts = []
-    for i, r in enumerate(results, 1):
-        parts.append(
-            f"Page {i}\n"
-            f"URL: {r.get('url', '')}\n"
-            f"Title: {r.get('title', '')}\n\n"
-            f"{r.get('text', '')}"
-        )
+    related_idx = 0
+    for r in results:
+        url = r.get('url', '')
+        if url == user_url:
+            parts.append(
+                f"PRIMARY REQUESTED PAGE:\n"
+                f"URL: {url}\n"
+                f"TITLE: {r.get('title', '')}\n"
+                f"CONTENT:\n"
+                f"{r.get('text', '')}"
+            )
+        else:
+            related_idx += 1
+            parts.append(
+                f"RELATED PAGE {related_idx}:\n"
+                f"URL: {url}\n"
+                f"TITLE: {r.get('title', '')}\n"
+                f"CONTENT:\n"
+                f"{r.get('text', '')}"
+            )
     return "\n\n---\n\n".join(parts)
 
 
@@ -121,10 +142,10 @@ async def run_agent(question: str, url: str) -> str:
                 pages = [url]
 
             if not pages:
-                return "I could not find any pages on this website."
+                pages = [url]
 
             max_pages = _get_max_scrape_pages()
-            pages_to_scrape = pages[:max_pages]
+            pages_to_scrape = build_pages_to_scrape(url, pages, limit=max_pages)
 
             results = []
             for page_url in pages_to_scrape:
@@ -135,7 +156,7 @@ async def run_agent(question: str, url: str) -> str:
             if not results:
                 return "I could not scrape any pages from this website."
 
-            combined_text = _build_combined_content(results)
+            combined_text = _build_combined_content(results, url)
 
             answer = generate_answer(
                 question=question,
@@ -167,7 +188,7 @@ async def stream_agent(question: str, url: str):
 
             yield {
                 "event": "progress",
-                "data": "Fetching website pages...",
+                "data": "Fetching related website pages...",
             }
 
             try:
@@ -185,19 +206,16 @@ async def stream_agent(question: str, url: str):
                 pages = [url]
 
             if not pages:
-                yield {
-                    "event": "error",
-                    "data": "I could not find any pages on this website.",
-                }
-                return
+                pages = [url]
 
             max_pages = _get_max_scrape_pages()
-            pages_to_scrape = pages[:max_pages]
+            pages_to_scrape = build_pages_to_scrape(url, pages, limit=max_pages)
             total = len(pages_to_scrape)
 
+            related_count = total - 1
             yield {
                 "event": "progress",
-                "data": f"Found {len(pages)} pages. Scraping up to {max_pages} pages...",
+                "data": f"Found {len(pages)} pages. Scraping requested page plus up to {related_count} related pages...",
             }
 
             results = []
@@ -205,7 +223,7 @@ async def stream_agent(question: str, url: str):
             for i, page_url in enumerate(pages_to_scrape, 1):
                 yield {
                     "event": "progress",
-                    "data": f"Scraping {i}/{total}: {page_url}",
+                    "data": f"Scraping {i}/{total}:\n  {page_url}",
                 }
 
                 result = await _scrape_page_with_fallback(session, page_url)
@@ -225,7 +243,7 @@ async def stream_agent(question: str, url: str):
                 }
                 return
 
-            combined_text = _build_combined_content(results)
+            combined_text = _build_combined_content(results, url)
 
             yield {
                 "event": "progress",
