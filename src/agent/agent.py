@@ -6,7 +6,7 @@ import os
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
-from src.agent.groq_agent import generate_answer, stream_answer
+from src.agent.groq_agent import choose_strategy, generate_answer, stream_answer
 
 logger = logging.getLogger(__name__)
 
@@ -127,25 +127,33 @@ async def run_agent(question: str, url: str) -> str:
         args=["run", "python", "-m", "src.mcp_server.server"],
     )
 
+    strategy = choose_strategy(url, question)
+    logger.info("[AGENT] Selected scraping strategy: %s url=%s question=%s", strategy, url, question)
+
+    STRATEGY_LIMITS = {"page_only": 1, "page_plus_related": 3, "site_summary": 5}
+    limit = STRATEGY_LIMITS.get(strategy, 5)
+
     async with stdio_client(server_params) as (read_stream, write_stream):
         async with ClientSession(read_stream, write_stream) as session:
             await session.initialize()
 
-            try:
-                pages = await call_mcp_tool(
-                    session,
-                    "fetch_pages",
-                    {"url": url},
-                )
-            except Exception as e:
-                logger.exception("fetch_pages failed for %s: %s", url, e)
-                pages = [url]
+            if strategy == "page_only":
+                pages = []
+            else:
+                try:
+                    pages = await call_mcp_tool(
+                        session,
+                        "fetch_pages",
+                        {"url": url},
+                    )
+                except Exception as e:
+                    logger.exception("fetch_pages failed for %s: %s", url, e)
+                    pages = [url]
 
             if not pages:
                 pages = [url]
 
-            max_pages = _get_max_scrape_pages()
-            pages_to_scrape = build_pages_to_scrape(url, pages, limit=max_pages)
+            pages_to_scrape = build_pages_to_scrape(url, pages, limit=limit)
 
             results = []
             for page_url in pages_to_scrape:
@@ -177,6 +185,13 @@ Pages scraped ({len(results)}):
 async def stream_agent(question: str, url: str):
     logger.info("[AGENT] Starting (stream): question=%s url=%s", question, url)
 
+    strategy = choose_strategy(url, question)
+    logger.info("[AGENT] Selected scraping strategy: %s url=%s question=%s", strategy, url, question)
+
+    STRATEGY_LIMITS = {"page_only": 1, "page_plus_related": 3, "site_summary": 5}
+    limit = STRATEGY_LIMITS.get(strategy, 5)
+    related_capacity = limit - 1
+
     server_params = StdioServerParameters(
         command="uv",
         args=["run", "python", "-m", "src.mcp_server.server"],
@@ -188,35 +203,45 @@ async def stream_agent(question: str, url: str):
 
             yield {
                 "event": "progress",
-                "data": "Fetching related website pages...",
+                "data": f"Selected scraping strategy: {strategy}",
             }
 
-            try:
-                pages = await call_mcp_tool(
-                    session,
-                    "fetch_pages",
-                    {"url": url},
-                )
-            except Exception as e:
-                logger.exception("fetch_pages failed for %s: %s", url, e)
+            if strategy == "page_only":
                 yield {
                     "event": "progress",
-                    "data": "Page discovery failed. Scraping the provided URL only.",
+                    "data": "Scraping requested page only...",
                 }
-                pages = [url]
+                pages = []
+            else:
+                yield {
+                    "event": "progress",
+                    "data": "Fetching related website pages...",
+                }
 
-            if not pages:
-                pages = [url]
+                try:
+                    pages = await call_mcp_tool(
+                        session,
+                        "fetch_pages",
+                        {"url": url},
+                    )
+                except Exception as e:
+                    logger.exception("fetch_pages failed for %s: %s", url, e)
+                    yield {
+                        "event": "progress",
+                        "data": "Page discovery failed. Scraping the provided URL only.",
+                    }
+                    pages = [url]
 
-            max_pages = _get_max_scrape_pages()
-            pages_to_scrape = build_pages_to_scrape(url, pages, limit=max_pages)
+                if not pages:
+                    pages = [url]
+
+                yield {
+                    "event": "progress",
+                    "data": f"Found {len(pages)} pages. Scraping requested page plus up to {related_capacity} related pages...",
+                }
+
+            pages_to_scrape = build_pages_to_scrape(url, pages, limit=limit)
             total = len(pages_to_scrape)
-
-            related_count = total - 1
-            yield {
-                "event": "progress",
-                "data": f"Found {len(pages)} pages. Scraping requested page plus up to {related_count} related pages...",
-            }
 
             results = []
 
